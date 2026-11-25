@@ -1,0 +1,51 @@
+diff --git a/agentlightning/verl/rollout_adapter.py b/agentlightning/verl/rollout_adapter.py
+index 89b23d0..f44c96d 100644
+--- a/agentlightning/verl/rollout_adapter.py
++++ b/agentlightning/verl/rollout_adapter.py
+@@ -7,6 +7,8 @@ from __future__ import annotations
+ import base64  # [multimodal-patch]
+ import io
+ import json
++import os  # [prove]
++import re  # [prove]
+ import zipfile
+ from typing import Any, cast
+ from urllib.request import url2pathname
+@@ -467,6 +469,28 @@ class RolloutAdapter:
+         # Keep rollout randomness within each sample instead of ordering samples by completion time.
+         sorted_rollouts = sorted(completed_rollouts, key=lambda rollout: (rollout.step, rollout.sample_idx_in_step))
+ 
++        # [prove] Optional train-row filter: keep only triplets whose decoded response
++        # matches AGL_TRAIN_RESPONSE_REGEX (e.g. decision-phase tool calls). Rewards of every
++        # rollout are still reported; rollouts left without triplets contribute no rows.
++        n_prove_filtered_triplets = 0
++        n_prove_kept_triplets = 0
++        _prove_pattern = os.environ.get("AGL_TRAIN_RESPONSE_REGEX")
++        if _prove_pattern:
++            _prove_regex = re.compile(_prove_pattern)
++            _prove_rollouts = []
++            for rollout in sorted_rollouts:
++                triplets = rollout.triplets or []
++                keep = [
++                    t for t in triplets
++                    if _prove_regex.search(_decode_token_ids(self.tokenizer, _token_ids(t.response)))
++                ]
++                n_prove_filtered_triplets += len(triplets) - len(keep)
++                n_prove_kept_triplets += len(keep)
++                _prove_rollouts.append(rollout.model_copy(update={"triplets": keep}))
++            sorted_rollouts = _prove_rollouts
++            print(f"[prove] train-row filter kept {n_prove_kept_triplets} / "
++                  f"{n_prove_kept_triplets + n_prove_filtered_triplets} triplets")
++
+         # [multimodal-patch] Image-to-row alignment is only implemented for the transition
+         # level: trajectory-level aggregation merges multi-turn prompts into one row, which
+         # breaks the correspondence between image placeholder tokens and image_urls, and
+@@ -914,6 +938,8 @@ class RolloutAdapter:
+ 
+         n_response_turns = len(response_len_per_turn_list)
+         data_metrics = {
++            "training/prove_kept_triplets": n_prove_kept_triplets,
++            "training/prove_filtered_triplets": n_prove_filtered_triplets,
+             "training/reward": float(np.mean(final_rewards)) if final_rewards else 0.0,
+             "training/n_sample": n_sample,
+             "training/n_rollouts": len(sorted_rollouts),

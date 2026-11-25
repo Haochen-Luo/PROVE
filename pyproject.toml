@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prove"
+version = "0.1.0"
+description = "PROVE: Protocol Reinforcement from Verified Evidence"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+# The reward, credit and metrics modules use the standard library only. Training runs inside an
+# Agent Lightning + verl + vLLM environment (see README), which provides everything else.
+dependencies = []
+
+[project.optional-dependencies]
+train = ["httpx", "hydra-core", "omegaconf"]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["prove*"]
+
+[tool.setuptools.package-data]
+"prove.harness_hooks" = ["*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

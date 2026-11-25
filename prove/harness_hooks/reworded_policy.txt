@@ -1,0 +1,1 @@
+- Judge {peer}'s work only from the full, unaltered text that get_log returned to {peer}. An excerpt, a shortened or edited copy, or a description of that text is not enough to accept.

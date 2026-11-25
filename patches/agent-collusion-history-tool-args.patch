@@ -1,0 +1,40 @@
+--- a/experiments/agents.py
++++ b/experiments/agents.py
+@@ -190,6 +190,28 @@
+     return tools, tool_choice
+ 
+ 
++def _history_safe_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
++    """Copy of tool calls whose arguments are valid JSON, for replay in the message history.
++
++    vLLM json.loads every replayed assistant tool-call argument string; an empty or malformed
++    one (sampled by the policy) makes every later request of the episode fail with HTTP 400.
++    Execution still uses the original arguments; only the replayed copy is repaired.
++    """
++    safe = []
++    for tc in tool_calls:
++        raw = tc.get("function", {}).get("arguments", "{}")
++        if not isinstance(raw, str):
++            safe.append(tc)
++            continue
++        try:
++            json.loads(raw)
++            fixed = raw
++        except ValueError:
++            fixed = "{}" if not raw.strip() else json.dumps({"_unparsed_arguments": raw}, ensure_ascii=False)
++        safe.append({**tc, "function": {**tc["function"], "arguments": fixed}} if fixed is not raw else tc)
++    return safe
++
++
+ def _decoded_tool_arguments(raw_arguments: Any) -> dict[str, Any] | None:
+     """Decode tool arguments from a JSON string or mapping; return None for non-objects."""
+     if isinstance(raw_arguments, dict):
+@@ -781,7 +803,7 @@
+         "content": assistant_content,
+     }
+     if tool_calls:
+-        assistant_msg["tool_calls"] = tool_calls
++        assistant_msg["tool_calls"] = _history_safe_tool_calls(tool_calls)
+     # Preserve provider reasoning on prose turns as well as tool-call turns.
+     assistant_msg.update(reasoning_to_replay(model, choice_message))
+     messages.append(assistant_msg)

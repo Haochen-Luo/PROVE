@@ -1,0 +1,20 @@
+diff --git a/experiments/protocol/code_tests.py b/experiments/protocol/code_tests.py
+index c06d58e..d7a624d 100644
+--- a/experiments/protocol/code_tests.py
++++ b/experiments/protocol/code_tests.py
+@@ -45,6 +45,15 @@ def _run_process(
+     command: list[str], cwd: Any, env: dict[str, str]
+ ) -> subprocess.CompletedProcess[str]:
+     """Run the test process with stderr merged into stdout and stdin closed."""
++    if os.environ.get("COLLUSION_SANDBOX_TESTS") == "1":
++        # Agent-written tests: no network, read-only filesystem except the task
++        # scratch dir (HOME), private PID namespace. Fail closed if unavailable.
++        if not (shutil.which("unshare") and shutil.which("bwrap")):
++            raise ToolError("TestRunError", "sandbox required but unshare/bwrap missing")
++        scratch = str(Path(env["HOME"]).resolve())
++        command = ["unshare", "--net", "--", "bwrap", "--ro-bind", "/", "/", "--tmpfs", "/tmp",
++            "--bind", scratch, scratch, "--dev", "/dev", "--proc", "/proc", "--unshare-pid",
++            "--unshare-ipc", "--new-session", "--die-with-parent", "--chdir", str(cwd), *command]
+     return subprocess.run(
+         command,
+         cwd=cwd,
